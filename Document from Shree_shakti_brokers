@@ -1,0 +1,267 @@
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Secure Messaging</title>
+  <style>
+    :root {
+      --bg: grey;
+      --primary: green;
+      --secondary: blue;
+      --card: #2d2d44;
+      --text: brown;
+      --focus: lavender;
+    }
+
+    body.light-theme {
+      --bg: black;
+      --primary: blue;
+      --secondary: pink;
+      --card: #ffffff;
+      --text: brown;
+      --focus: lightgrey;
+    }
+
+    * {
+      box-sizing: border-box;
+      transition: all 0.3s ease;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      animation: fadeIn 1s ease;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 50px auto;
+      padding: 30px;
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px brown;
+      animation: slideUp 1s ease;
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--primary);
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .animate-title {
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    h2 {
+      color: var(--secondary);
+      margin-top: 2rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin: 10px 0 20px;
+      padding: 12px;
+      background: white;
+      color: var(--text);
+      border: 2px solid grey;
+      border-radius: 12px;
+      font-size: 14px;
+      font-family: monospace;
+    }
+
+    body.light-theme textarea {
+      background: whitesmoke;
+      color: black;
+      border: 2px solid white;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--focus);
+      box-shadow: 0 0 10px var(--focus);
+    }
+
+    button {
+      background: var(--primary);
+      color: lightblue;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 20px;
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
+      animation: pulseButton 2s infinite;
+    }
+
+    button:hover {
+      background: var(--secondary);
+      transform: scale(1.05);
+      box-shadow: 0 0 15px var(--secondary);
+    }
+
+    .theme-toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 99;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes pulseButton {
+      0%, 100% { box-shadow: 0 0 10px var(--primary); }
+      50% { box-shadow: 0 0 20px var(--secondary); }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% {
+        text-shadow: 0 0 10px var(--primary), 0 0 20px var(--secondary);
+      }
+      50% {
+        text-shadow: 0 0 5px var(--secondary), 0 0 10px var(--primary);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="theme-toggle">
+    <button onclick="toggleTheme()">🎨 Switch Theme</button>
+  </div>
+
+  <div class="container">
+    <h1 class="animate-title">🔐 Secure Messaging App</h1>
+
+    <h2>🔑 Generate RSA Keys</h2>
+    <button onclick="generateRSAKeys()">Generate Keys</button>
+    <textarea id="publicKey" placeholder="Public Key"></textarea>
+    <textarea id="privateKey" placeholder="Private Key"></textarea>
+
+    <h2>✉️ Encrypt Message</h2>
+    <textarea id="message" placeholder="Enter your message"></textarea>
+    <button onclick="encryptMessage()">Encrypt</button>
+    <textarea id="encryptedMessage" placeholder="Encrypted Message"></textarea>
+    <textarea id="encryptedAESKey" placeholder="Encrypted AES Key"></textarea>
+
+    <h2>🔓 Decrypt Message</h2>
+    <button onclick="decryptMessage()">Decrypt</button>
+    <textarea id="decryptedMessage" placeholder="Decrypted Message"></textarea>
+  </div>
+
+  <script>
+    let rsaKeyPair, aesKey, iv;
+
+    function toggleTheme() {
+      document.body.classList.toggle("light-theme");
+    }
+
+    async function generateRSAKeys() {
+      rsaKeyPair = await crypto.subtle.generateKey(
+        {
+          name: "RSA-OAEP",
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: "SHA-256"
+        },
+        true,
+        ["encrypt", "decrypt"]
+      );
+
+      const publicKeyJwk = await crypto.subtle.exportKey("jwk", rsaKeyPair.publicKey);
+      const privateKeyJwk = await crypto.subtle.exportKey("jwk", rsaKeyPair.privateKey);
+
+      document.getElementById("publicKey").value = JSON.stringify(publicKeyJwk, null, 2);
+      document.getElementById("privateKey").value = JSON.stringify(privateKeyJwk, null, 2);
+    }
+
+    async function encryptMessage() {
+      const message = document.getElementById("message").value;
+      iv = crypto.getRandomValues(new Uint8Array(12));
+
+      aesKey = await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 },
+        true,
+        ["encrypt", "decrypt"]
+      );
+
+      const encoded = new TextEncoder().encode(message);
+      const ciphertext = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        aesKey,
+        encoded
+      );
+
+      const publicKeyJwk = JSON.parse(document.getElementById("publicKey").value);
+      const publicKey = await crypto.subtle.importKey(
+        "jwk",
+        publicKeyJwk,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["encrypt"]
+      );
+
+      const rawAES = await crypto.subtle.exportKey("raw", aesKey);
+      const encryptedAESKey = await crypto.subtle.encrypt(
+        { name: "RSA-OAEP" },
+        publicKey,
+        rawAES
+      );
+
+      document.getElementById("encryptedMessage").value = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
+      document.getElementById("encryptedAESKey").value = btoa(String.fromCharCode(...new Uint8Array(encryptedAESKey)));
+    }
+
+    async function decryptMessage() {
+      const encryptedAESKeyB64 = document.getElementById("encryptedAESKey").value;
+      const encryptedMessageB64 = document.getElementById("encryptedMessage").value;
+      const privateKeyJwk = JSON.parse(document.getElementById("privateKey").value);
+
+      const privateKey = await crypto.subtle.importKey(
+        "jwk",
+        privateKeyJwk,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["decrypt"]
+      );
+
+      const encryptedAESKey = Uint8Array.from(atob(encryptedAESKeyB64), c => c.charCodeAt(0));
+      const rawAESKey = await crypto.subtle.decrypt(
+        { name: "RSA-OAEP" },
+        privateKey,
+        encryptedAESKey
+      );
+
+      const decryptedAESKey = await crypto.subtle.importKey(
+        "raw",
+        rawAESKey,
+        { name: "AES-GCM" },
+        true,
+        ["decrypt"]
+      );
+
+      const ciphertext = Uint8Array.from(atob(encryptedMessageB64), c => c.charCodeAt(0));
+      const decrypted = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        decryptedAESKey,
+        ciphertext
+      );
+
+      const decoded = new TextDecoder().decode(decrypted);
+      document.getElementById("decryptedMessage").value = decoded;
+    }
+  </script>
+
+
+</body></html>
